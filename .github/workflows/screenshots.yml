@@ -1,0 +1,44 @@
+name: Update README screenshots
+
+# Run manually from the Actions tab after UI changes.
+# Starts the app with seeded demo data, captures it with Playwright and commits docs/cover.jpg.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports: ["27017:27017"]
+    env:
+      MONGO_URL: mongodb://localhost:27017/helpdesk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund && npm run build
+        working-directory: client
+      - run: npm install --no-audit --no-fund && npm run seed
+        working-directory: server
+      - name: Start the app
+        working-directory: server
+        run: |
+          CLIENT_DIST=../client/dist node src/server.js &
+          npx --yes wait-on http://localhost:4000/api/health
+      - run: npm install --no-save --no-audit --no-fund playwright@1.48 && npx playwright install --with-deps chromium
+      - run: node scripts/readme-screenshots.mjs
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/cover.jpg
+          if ! git diff --cached --quiet; then
+            git commit -m "Update README screenshots"
+            git push
+          fi
